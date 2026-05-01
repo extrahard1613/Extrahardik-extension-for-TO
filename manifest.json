@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Extra Hard's Extension",
+  "version": "1.0.0",
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.tankionline.com/*"
+      ],
+      "js": [
+        "injector.js"
+      ],
+      "css": [
+        "style.css"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "*://*.tankionline.com/*"
+      ],
+      "resources": [
+        "main.js",
+        "menu.js",
+        "goldBoxTimer.js",
+        "juggernautSpawnHack.js",
+        "graphicContexts.js",
+        "antikickHack.js",
+        "autoPurchaseSuppliesFromShop.js",
+        "helpers.js",
+        "overdriveTimer.js",
+
+        "multipleAccount/constants.js",
+        "multipleAccount/accountService.js",
+        "multipleAccount/index.js",
+        "multipleAccount/menu.js",
+        "multipleAccount/observers.js",
+        "multipleAccount/premium.js",
+        "multipleAccount/storage.js",
+        "multipleAccount/tabs.js",
+        "multipleAccount/ui.js",
+
+        "images/TabBackground.png",
+        "images/switchAccountsButton.png",
+        "images/Nuclear.svg",
+        "images/closeAccountListButton.png"
+      ]
+    }
+  ]
+}
