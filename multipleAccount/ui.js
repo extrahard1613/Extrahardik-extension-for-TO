@@ -1,5 +1,5 @@
-import { TABS } from "./constants.js";
-import { getAccounts, setAccounts } from "./storage.js";
+import { TABS, SELECTORS } from "./constants.js";
+import { getAccounts } from "./storage.js";
 import { switchAccountListTab } from "./tabs.js";
 import {
     saveAccountInformation,
@@ -8,81 +8,82 @@ import {
 } from "./accountService.js";
 import { createAccountMenuHandler } from "./menu.js";
 
-export function openAccountsList() {    
-    document.querySelector(".multipleAccount").style.display = "block";
-    document.querySelector(".multipleAccount-popupContainer").style.display = "block";
-
-    document.querySelector(".addAccountButton").addEventListener("click", saveAccountInformation);
-
-    TABS.forEach(tab => addAccountInformation(tab));
+export function initInterface() {
+    document.querySelector(SELECTORS.UI.ADDBUTTON)?.addEventListener("click", saveAccountInformation);
 
     TABS.forEach(tab => {
         const tabElement = document.getElementById(`${tab}Tab`);
-        tabElement.addEventListener("click", () => 
+        tabElement?.addEventListener("click", () => 
             switchAccountListTab(tab, `.${tab}List-accountElement`)
         );
+
+        const accountList = document.getElementById(tab + "AccountList");
+        accountList?.addEventListener("click", (event) => handleListClick(event, tab));
     });
+}
+
+export function openAccountsList() {    
+    document.querySelector(SELECTORS.UI.MODAL).style.display = "block";
+    document.querySelector(SELECTORS.UI.CONTAINER).style.display = "block";
+
+    TABS.forEach(tab => renderAccountList(tab));
 
     switchAccountListTab("first", ".firstList-accountElement");
 }
 
 export function closeAccountsList() {
-    document.querySelector(".multipleAccount").style.display = "none";
-    document.querySelector(".multipleAccount-popupContainer").style.display = "none";
+    document.querySelector(SELECTORS.UI.MODAL).style.display = "none";
+    document.querySelector(SELECTORS.UI.CONTAINER).style.display = "none";
 }
 
-function countAccounts(accountListCount, resultElement) {
-    const accountListCounts = accountListCount.childElementCount; //подсчет кол-ва аккаунтов
+function handleListClick(event, tab) {
+    const target = event.target;
+    
+    const row = target.closest(".accountElement");
+    if (!row) return;
 
-    const tabTextContents = {
-        'firstTab-textContent': 'Все',
-        'secondTab-textContent': 'Группа А',
-        'thirdTab-textContent': 'Группа Б'
-    };
+    const parent = row.parentNode;
+    if (!parent) return;
 
-    resultElement.textContent = `${tabTextContents[resultElement.id]} [${accountListCounts}]`; //отображаем кол-во аккаунтов
+    const allRows = Array.from(parent.children);
+    const index = allRows.indexOf(row);
+
+    const accounts = getAccounts(tab);
+
+    if (target.closest(".accountDeleteButton")) {
+        deleteAccountInformationHandler(event, index, tab);
+        return;
+    }
+
+    if (target.closest(".accountName-textContent")) {
+        createAccountMenuHandler(index, event, accounts);
+        return;
+    }
+
+    switchAccountHandler(event, index, tab);
 }
 
-export function addAccountInformation(tab) {
+export function renderAccountList(tab) {
     const accounts = getAccounts(tab);
     const accountList = document.getElementById(tab + "AccountList");
-    accountList.innerHTML = ''; //очищаем список перед добавлением актуального
+    const textContentElement = document.getElementById(tab + "Tab-textContent");
 
-    //проходим по аккаунтам и для каждого создаем элемент в списке
-    accounts.forEach(account => {
-        const accountElement = document.createElement("tr");
-        accountElement.className = "accountElement " + tab + "List-accountElement";
-        accountElement.innerHTML = createAccountListHTML(account, tab + "AccountDeleteButton"); //вызываем функцию для создания заготовки списка
+    if (!accountList) return;
 
-        accountList.appendChild(accountElement);
-    });
+    accountList.innerHTML = accounts.map(acc => createAccountRowHTML(acc, tab)).join('');
 
-    countAccounts(accountList, document.getElementById(tab + "Tab-textContent")); //вызываем функцию для подсчет актуального кол-ва аккаунтов в списке
-
-    //добавления слушателя для переключения между аккаунтами
-    let switchAccountButton = document.querySelectorAll(".accountElement." + tab + "List-accountElement"); 
-    switchAccountButton.forEach((button, index) => {
-        button.addEventListener("click", (event) => switchAccountHandler(event, index, tab));
-    });
-
-    //добавления слушателя для удаления аккаунта из списка
-    let deleteAccountButtons = document.querySelectorAll(".accountDeleteButton." + tab + "AccountDeleteButton"); 
-    deleteAccountButtons.forEach((button, index) => {
-        button.addEventListener("click", (event) => deleteAccountInformationHandler(event, index, tab));
-    });    
-    
-    //добавления слушателя для вызова меню аккаунта 
-    let openAccountMenuButtons = document.querySelectorAll(".accountElement." + tab + "List-accountElement" + " .accountName-textContent");
-    openAccountMenuButtons.forEach((button, index) => {
-        button.addEventListener("click", (event) => createAccountMenuHandler(index, event, accounts));
-    });
+    const tabLabels = { first: 'Все', second: 'Группа А', third: 'Группа Б' };
+    if (textContentElement) {
+        textContentElement.textContent = `${tabLabels[tab]} [${accounts.length}]`;
+    }
 }
 
-function createAccountListHTML(account, deleteButtonClass){
+function createAccountRowHTML(account, tab) {
     return `
+        <tr class="accountElement ${tab}List-accountElement">
             <td class='accountPremium'>
                 <div class='accountPremium-backgroundImage'></div>
-                <span class='accountPremium-textContent'>${account.premiumAccount}</span>
+                <span class='accountPremium-textContent'>${account.premiumAccount || '-'}</span>
             </td>
             <td class='accountName'>
                 <div class='accountRank-backgroundImage' style='background-image: url("${account.rankIcon}");'></div>
@@ -100,7 +101,8 @@ function createAccountListHTML(account, deleteButtonClass){
                 <div class='accountTankcoins-backgroundImage'></div>
                 <span class='accountTankcoins-textContent'>${account.tankcoins || '0'}</span>
             </td>
-            <td class='accountDeleteButton ${deleteButtonClass}'>
+            <td class='accountDeleteButton ${tab}AccountDeleteButton'>
                 <div class='accountDeleteButton-backgroundImage'></div>
-            </td>`;
+            </td>
+        </tr>`;
 }
