@@ -1,11 +1,11 @@
-import { TABS } from "./constants.js";
+import { TABS, SELECTORS } from "./constants.js";
 
-let activeTab = null;
+export let activeTab = null;
 let rowAnimationTimers = [];
 let searchListenerAttached = false;
 
 export function switchAccountListTab(accountListTab, accountElement) {
-    if (activeTab === accountListTab) return;
+    if (activeTab === accountListTab && activeTab !== null) return;
 
     activeTab = accountListTab;
 
@@ -15,9 +15,9 @@ export function switchAccountListTab(accountListTab, accountElement) {
     rowAnimationTimers = [];
 
     tabNumbers.forEach(tabNumber => {
-        const underline = document.getElementById(tabNumber + "ActiveTabUnderline");
-        const table = document.getElementById(tabNumber + "AccountList");
-        const text = document.getElementById(tabNumber + "Tab-textContent");
+    const underline = document.getElementById(SELECTORS.UI.TAB_UNDERLINE(tabNumber));
+        const table = document.getElementById(SELECTORS.UI.TAB_LIST(tabNumber));
+        const text = document.getElementById(SELECTORS.UI.TAB_TEXT(tabNumber));
 
         const isActive = tabNumber === accountListTab;
 
@@ -41,7 +41,7 @@ export function switchAccountListTab(accountListTab, accountElement) {
 }
 
 function bindSearch(accountElement) {
-    const input = document.querySelector(".searchAccountInput");
+    const input = document.querySelector(SELECTORS.UI.SEARCH_INPUT);
     if (!input) return;
 
     if (searchListenerAttached) {
@@ -74,12 +74,11 @@ function animateRows(tabNumber) {
 }
 
 function searchAccount(elementNumber) {
-    const searchInput = document.querySelector('.searchAccountInput').value.toLowerCase();
+    const searchInput = document.querySelector(SELECTORS.UI.SEARCH_INPUT).value.toLowerCase();
     const accounts = document.querySelectorAll(elementNumber);
     
-    //проходим по каждому аккаунту и ищем совпадения с запросом в input
     accounts.forEach(account => {
-        const accountSpan = account.querySelector('.accountName-textContent');
+        const accountSpan = account.querySelector(SELECTORS.UI.ACCOUNT);
         if (accountSpan) {
             const nickname = accountSpan.textContent.toLowerCase();
             if (nickname.includes(searchInput)) {
