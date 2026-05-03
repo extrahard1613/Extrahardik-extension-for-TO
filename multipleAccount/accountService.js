@@ -1,43 +1,46 @@
-import { TABS } from "./constants.js";
-import { getAccounts, setAccounts } from "./storage.js";
-import { addAccountInformation } from "./ui.js";
+import { TABS, SELECTORS } from "./constants.js";
+import { getAccounts, setAccounts, updateAccountAcrossAllTabs } from "./storage.js";
+import { renderAccountList } from "./ui.js";
 import {expectElement} from "../helpers.js";
 import {
     calculatePremiumExpiration,
     countRestOfPremiumAccount,
     getPremiumAccountInformation
 } from "./premium.js";
+import { activeTab } from "./tabs.js";
 
+//Функция сохранения информации при добавлении аккаунта
 export async function saveAccountInformation() {
     const accountInfo = await getAccountInformation();
+    if (!accountInfo) return;
 
     let targetId = getExistingId(accountInfo.nickname, accountInfo.entranceHashKey);
     if (!targetId) {
         targetId = generateAccountId();
     }
 
-    //проходим по каждому списку и ищем активный
-    TABS.forEach(tab => {
-        const accountList = document.getElementById(tab + "AccountList");
-        // проверяем является ли список активным или главным
-        if (window.getComputedStyle(accountList).display !== 'none' || tab === "first") {
-            const accounts = getAccounts(tab);
+    window.location.hash = `${targetId}`;
 
-            // Проверяем, есть ли ОН ИМЕННО В ЭТОМ списке
-            const alreadyInThisList = accounts.find(acc => 
-                acc.entranceHashKey === accountInfo.entranceHashKey || 
-                acc.nickname === accountInfo.nickname
-            );
+    const targetTabs = ["first"]; 
+    if (activeTab && activeTab !== "first") {
+        targetTabs.push(activeTab);
+    }
 
-            if (alreadyInThisList) return; // Если уже есть в этой вкладке — пропускаем
-            
-            // Сохраняем с единым ID
-            const accountToSave = { ...accountInfo, id: targetId };
-            accounts.push(accountToSave);
-            
-            setAccounts(tab, accounts);
-            addAccountInformation(tab);
-        }   
+    targetTabs.forEach(tab => {
+        const accounts = getAccounts(tab);
+
+        const isDuplicate = accounts.some(acc => 
+            acc.entranceHashKey === accountInfo.entranceHashKey || 
+            acc.nickname === accountInfo.nickname
+        );
+
+        if (isDuplicate) return;
+
+        const accountToSave = { ...accountInfo, id: targetId };
+        accounts.push(accountToSave);
+        
+        setAccounts(tab, accounts);
+        renderAccountList(tab);
     });
 }
 
@@ -48,7 +51,7 @@ export async function replaceAccountInformation() {
     if (!currentHashInStorage) return;
 
     let nicknameOnScreen = '';
-    const nicknameElement = document.querySelector(".UserInfoContainerStyle-userNameRank.UserInfoContainerStyle-textDecoration");
+    const nicknameElement = document.querySelector(SELECTORS.LOBBY.NICKNAME);
     if (nicknameElement) nicknameOnScreen = nicknameElement.textContent.trim();
 
     if (!id) {
@@ -75,20 +78,10 @@ export async function replaceAccountInformation() {
 
     const updatedData = await getAccountInformation(id);
 
-    if (updatedData.nickname && accountInBase.nickname !== updatedData.nickname) {
+    if (updatedData.nickname && accountInBase.nickname !== updatedData.nickname)
         return;
-    }
 
-    TABS.forEach(tab => {
-        const key = tab + "AccountListData";
-        const data = getAccounts(tab);
-        const target = data.find(acc => acc.id === id);
-        if (target) {
-            Object.assign(target, updatedData);
-            setAccounts(tab, data);
-            addAccountInformation(tab);
-        }
-    });
+    updateAccountAcrossAllTabs(id, updatedData);
 }
 
 async function restartPage(id) {
@@ -98,22 +91,18 @@ async function restartPage(id) {
 
     const currentAccount = await getAccountInformation(id);
 
-    // если уже на этом аккаунте — ничего не делаем
     if (currentAccount && currentAccount.entranceHashKey === account.entranceHashKey) {
         return;
     }
 
-    // ставим актуальный ключ входа
     localStorage.setItem('entrance_hash_key', account.entranceHashKey);
 
-    // обновляем URL с новым id
     window.location.href =
         window.location.origin +
         window.location.pathname +
         "#" +
         id;
 
-    // перезагрузка страницы (старое поведение сохранено)
     window.location.reload();
 }
 
@@ -184,10 +173,7 @@ function deleteAccountInformation(id, tab) {
     const filtered = accounts.filter(acc => acc.id !== id);
     setAccounts(tab, filtered);
     
-    // Перерисовываем списки (можно оптимизировать, но так надежнее)
-    addAccountInformation('first');
-    addAccountInformation('second');
-    addAccountInformation('third');
+    TABS.forEach(tab => renderAccountList(tab));    
 }
 
 //функция для управления удалением аккаунта
@@ -210,11 +196,10 @@ export function deleteAccountInformationHandler(event, index, tab){
     deleteAccountInformation(account.id, tab);
 }
 
-//спомогательная функция для сравнения аккаунтов
+//Сравнивает аккаунты
 function findDuplicates(id) {
-    // Просто проходим по всем спискам и удаляем этот ID
-    deleteAccountInformation(id, 'secondAccountListData');
-    deleteAccountInformation(id, 'thirdAccountListData');
+    deleteAccountInformation(id, 'second'); 
+    deleteAccountInformation(id, 'third');
 }
 
 function getCurrentAccountIdFromHash() {
@@ -238,6 +223,7 @@ function getCurrentAccountIdFromHash() {
     return null;
 }
 
+//Запись данных об танкоинах
 export function updateTancoins() {
     let idFromUrl = getCurrentAccountIdFromHash();
     const currentHashInStorage = localStorage.getItem("entrance_hash_key") || "";
@@ -250,28 +236,19 @@ export function updateTancoins() {
     if (currentHashInStorage !== accountInBase.entranceHashKey)
         return;
 
-    const tankcoinsElement = document.querySelector(".UserScoreComponentStyle-coinIcon");
+    const tankcoinsElement = document.querySelector(SELECTORS.SHOP.TANKCOINS_ICON);
 
     if (!tankcoinsElement) 
         return;
 
-    const tankcoins =
-        tankcoinsElement.nextElementSibling?.textContent?.trim() || "";
+    const tankcoins = tankcoinsElement.nextElementSibling?.textContent?.trim() || "";
 
     if (!tankcoins) return;
 
-    TABS.forEach(tab => {
-        const data = getAccounts(tab);
-        const target = data.find(acc => acc.id === idFromUrl);
-
-        if (target) {
-            target.tankcoins = tankcoins;
-            setAccounts(tab, data);
-            addAccountInformation(tab);
-        }
-    });
+    updateAccountAcrossAllTabs(idFromUrl, { tankcoins });
 }
 
+//Обновление данных аккаунта
 function updateAccountInformation(tab, accountInfo) {
     const accounts = getAccounts(tab);
 
@@ -286,7 +263,7 @@ function updateAccountInformation(tab, accountInfo) {
     }
 }
 
-//функция обновляет данные про премиум
+//Обновление данных об премиуме
 function updatePremiumAccountInformation(accounts){
     accounts.forEach(account => {
         if (account.premiumAccountExpiration !== -1)    
@@ -294,21 +271,25 @@ function updatePremiumAccountInformation(accounts){
     });
 } 
 
-//получаем данные, записываем их в обьект и возвращаем его
+//Возвращает обьект с данными об аккаунте
 async function getAccountInformation(existingId = null){
+    let premiumAccount = await getPremiumAccountInformation();
+    if (!premiumAccount) return null;
 
-    let premiumAccount = await getPremiumAccountInformation();  
-
-    let rankIconElement = document.querySelector(".UserInfoContainerStyle-titleRankIcon");
+    let rankIconElement = await expectElement(SELECTORS.LOBBY.RANK_ICON);
+    if (!rankIconElement) return null;
     let rankIcon = rankIconElement ? rankIconElement.getAttribute("src") : '';
     
-    let nicknameElement = document.querySelector(".UserInfoContainerStyle-userNameRank.UserInfoContainerStyle-textDecoration");
+    let nicknameElement = await expectElement(SELECTORS.LOBBY.NICKNAME);
+    if (!nicknameElement) return null;
     let nickname = nicknameElement ? nicknameElement.textContent : '';
 
-    let crystalsElement = document.querySelector(".UserScoreComponentStyle-iconCrystal");
+    let crystalsElement = await expectElement(SELECTORS.LOBBY.CRYSTALS_ICON);
+    if (!crystalsElement) return null;
     let crystals = crystalsElement ? crystalsElement.nextElementSibling.textContent : '';
 
-    let rubiesElement = document.querySelector(".-iconCoinSizeMedium");
+    let rubiesElement = await expectElement(SELECTORS.LOBBY.RUBIES_ICON);
+    if (!rubiesElement) return null;
     let rubies = rubiesElement ? rubiesElement.nextElementSibling.textContent : '';
 
     let entranceHashKey = localStorage.getItem('entrance_hash_key') || '';
@@ -326,6 +307,7 @@ async function getAccountInformation(existingId = null){
     };
 }
 
+//Проверка на существования аккаунта в списке
 function getExistingId(nickname, hash) {
     for (const tab of TABS) {
         const accounts = getAccounts(tab);
@@ -336,6 +318,7 @@ function getExistingId(nickname, hash) {
     return null;
 }
 
+//Генерация id аккаунта
 function generateAccountId() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2);
+    return crypto.randomUUID();
 }
