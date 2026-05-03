@@ -1,99 +1,119 @@
-import { expectElement } from "../helpers.js";
+import { expectElement} from "../helpers.js";
+import { MINUTE, HOUR, DAY, SELECTORS } from "./constants.js";
 
-export function calculatePremiumExpiration(premiumAccount) {
-    const daysPattern = /(\d+)\s*д/;
-    const hoursPattern = /(\d+)\s*ч/;
-    const minutesPattern = /(\d+)\s*м/;
+const ANIMATION_MS = 500;
+const SAFETY_BUFFER = 80;
 
-    let days = 0;
-    let hours = 0;
-    let minutes = 0;
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-    let daysMatch = premiumAccount.match(daysPattern);
-    let hoursMatch = premiumAccount.match(hoursPattern);
-    let minutesMatch = premiumAccount.match(minutesPattern);
+function waitForAnimation(element, fallback = ANIMATION_MS + SAFETY_BUFFER) {
+    return new Promise(resolve => {
+        if (!element) {
+            resolve();
+            return;
+        }
 
-    if (daysMatch) 
-        days = parseInt(daysMatch[1], 10);
+        let finished = false;
 
-    if (hoursMatch) 
-        hours = parseInt(hoursMatch[1], 10);
+        const done = () => {
+            if (finished) return;
+            finished = true;
+            element.removeEventListener("animationend", done);
+            resolve();
+        };
 
-    if (minutesMatch) 
-        minutes = parseInt(minutesMatch[1], 10);
+        element.addEventListener("animationend", done, { once: true });
+        setTimeout(done, fallback);
+    });
+}
 
-    //вычисляем число, когда премиум заканчивается и переводим эту дату в миллисекунды
-    if (days || hours || minutes) {
-        let currentDate = new Date();
-        let premiumAccountExpiration = new Date(currentDate.getTime() + days * 24 * 60 * 60 * 1000 + hours * 60 * 60 * 1000 + minutes * 60 * 1000);
+function parsePremiumText(text, symbol) {
+    return +(text.match(new RegExp(`(\\d+)\\s*${symbol}`))?.[1] || 0);
+}
 
-        return premiumAccountExpiration;
-    }
-    return -1;
+export function calculatePremiumExpiration(text) {
+    if (!text || text === "-") return -1;
+
+    const days = parsePremiumText(text, "д");
+    const hours = parsePremiumText(text, "ч");
+    const minutes = parsePremiumText(text, "м");
+
+    const totalMs =
+        days * DAY +
+        hours * HOUR +
+        minutes * MINUTE;
+
+    return totalMs > 0
+        ? new Date(Date.now() + totalMs)
+        : -1;
 }
 
 export function countRestOfPremiumAccount(account) {
-    let currentDate = new Date();
-    
-    //считаем сколько времени осталось до окончания премиума в миллисекундах
-    let premiumAccountExpiration = new Date(account.premiumAccountExpiration);
-    const premiumAccountTime = premiumAccountExpiration - currentDate;
-    
-    if (premiumAccountTime <= 0) 
-        return '-';
+    const expiresAt = new Date(account.premiumAccountExpiration).getTime();
+    const diff = expiresAt - Date.now();
 
-    //считаем остаток в нужных единицах измерения
-    let premiumAccountDays = Math.floor(premiumAccountTime / (24 * 60 * 60 * 1000));
-    let remainingHours = premiumAccountTime % (24 * 60 * 60 * 1000);
+    if (!Number.isFinite(expiresAt) || diff <= 0) {
+        return "-";
+    }
 
-    let premiumAccountHours = Math.floor(remainingHours / (60 * 60 * 1000));
-    let remainingMinutes = remainingHours % (60 * 60 * 1000);
+    const days = Math.floor(diff / DAY);
+    const hours = Math.floor((diff % DAY) / HOUR);
+    const minutes = Math.floor((diff % HOUR) / MINUTE);
 
-    let premiumAccountMinutes = Math.floor(remainingMinutes / (60 * 1000));
+    if (days > 0) return `${days}д ${hours}ч`;
+    if (hours > 0) return `${hours}ч ${minutes}м`;
 
-    //выводим результат в нужных единицах измерения
-    if (premiumAccountDays > 0) 
-        return `${premiumAccountDays}д ${premiumAccountHours}ч`;
-    else if (premiumAccountHours > 0)
-        return `${premiumAccountHours}ч ${premiumAccountMinutes}м`;
-    else 
-        return `${premiumAccountMinutes}м`;
+    return `${minutes}м`;
 }
- 
-//функция открывает меню с премиумом, получает значение и возвращает его
-export async function getPremiumAccountInformation(){
-    let premiumAccountButton = document.querySelector(".UserInfoContainerStyle-blockLeftPanel .UserInfoContainerStyle-userTitleContainer .-flexCenterAlignCenterColumn");
-    premiumAccountButton.click();
 
-    let premiumAccountContainer = await expectElement(document, ".ModalStyle-shaded");
-    let premiumAccountContainer2 = document.querySelector(".DialogPremiumAccountStyle-mainScreen");
+function readPremiumValue() {
+    const premiumText = document.querySelector(SELECTORS.PREMIUM.PREMIUM_TEXT);
 
-    premiumAccountContainer.style.setProperty('display', 'none', 'important');
-    premiumAccountContainer2.style.setProperty('display', 'none', 'important');
+    const noPremium = document.querySelector(SELECTORS.PREMIUM.NOPREMIUM);
 
-    let premiumAccountElement = document.querySelector(".UserInfoContainerStyle-grayColor > :nth-child(1)");
-    let noPremiumAccountElement = document.querySelector(".DialogPremiumAccountStyle-noPremium");
+    if (premiumText) 
+        return premiumText.textContent.trim() || "-";
 
-    let premiumAccount = '-';
+    if (noPremium) 
+        return "-";
 
-    if (premiumAccountElement) {
-        const text = premiumAccountElement.textContent.trim();
-        premiumAccount = text !== '' ? text : '-';
-    } 
-    else if (noPremiumAccountElement) 
-         premiumAccount = '-';
+    return "-";
+}
 
-    const closePremiumButton = document.querySelector(".DialogPremiumAccountStyle-closeButton");
+export async function getPremiumAccountInformation() {
+    const button = await expectElement(SELECTORS.LOBBY.PREMIUM_BUTTON);
+    button.click();
+
+    const overlay = await expectElement(SELECTORS.PREMIUM.OVERLAY);
+    const modal = await expectElement(SELECTORS.PREMIUM.MODAL);
+
+    overlay.style.opacity = "0";
+    overlay.style.pointerEvents = "none";
+    modal.style.animation = "none";
+
+    const premiumAccount = readPremiumValue();
+
+    triggerEscape(overlay);
+
     setTimeout(() => {
-        closePremiumButton.click();
-        premiumAccountContainer.style.setProperty('display', 'none', 'important');
-        premiumAccountContainer2.style.setProperty('display', 'none', 'important');
-    }, 500);
-
-    setTimeout(() => {
-        premiumAccountContainer.style.setProperty('display', 'flex', 'important');
-        premiumAccountContainer2.style.setProperty('display', 'flex', 'important');
-    }, 1000);
+        overlay.style.opacity = "1";
+    }, 200);
 
     return premiumAccount;
-} 
+}
+
+function triggerEscape(targetElement = document) {
+    const eventSettings = {
+        key: "Escape",
+        code: "Escape",
+        keyCode: 27,
+        which: 27,
+        bubbles: true,
+        cancelable: true
+    };
+
+    targetElement.dispatchEvent(new KeyboardEvent("keydown", eventSettings));
+    targetElement.dispatchEvent(new KeyboardEvent("keyup", eventSettings));
+}
