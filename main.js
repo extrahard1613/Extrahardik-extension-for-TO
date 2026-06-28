@@ -7,7 +7,8 @@ import {
     SELECTORS,
     replaceAccountInformation,
     lookingForTancoins,
-    watchForLogout
+    watchForLogout,
+    initNicknameObserver
 } from "./multipleAccount/index.js";
 
 let injectedElements = document.getElementById("modal-root");
@@ -91,6 +92,7 @@ function injectAccountButton(targetElement) {
   setupCloseListeners();
   initInterface();
   replaceAccountInformation();
+  initNicknameObserver();
 }
 
 function setupCloseListeners() {
