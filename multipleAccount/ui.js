@@ -7,6 +7,9 @@ import {
     deleteAccountInformationHandler
 } from "./accountService.js";
 import { createAccountMenuHandler } from "./menu.js";
+import { countRestOfPremiumAccount } from "./premium.js";
+
+let premiumUpdateInterval = null;
 
 export function initInterface() {
     document.querySelector(SELECTORS.UI.ADDBUTTON)?.addEventListener("click", saveAccountInformation);
@@ -29,11 +32,40 @@ export function openAccountsList() {
     TABS.forEach(tab => renderAccountList(tab));
 
     switchAccountListTab("first", ".firstList-accountElement");
+
+    if (!premiumUpdateInterval) {
+        premiumUpdateInterval = setInterval(() => {
+            TABS.forEach(tab => updatePremiumTimersLive(tab));
+        }, 30000); 
+    }
 }
 
 export function closeAccountsList() {
     document.querySelector(SELECTORS.UI.MODAL).style.display = "none";
     document.querySelector(SELECTORS.UI.CONTAINER).style.display = "none";
+
+    if (premiumUpdateInterval) {
+        clearInterval(premiumUpdateInterval);
+        premiumUpdateInterval = null;
+    }
+}
+
+function updatePremiumTimersLive(tab) {
+    const accountList = document.getElementById(tab + "AccountList");
+    if (!accountList) return;
+
+    const accounts = getAccounts(tab);
+    const rows = accountList.querySelectorAll(".accountElement");
+
+    rows.forEach((row, index) => {
+        const account = accounts[index];
+        if (!account) return;
+
+        const premiumSpan = row.querySelector(".accountPremium-textContent");
+        if (premiumSpan) {
+            premiumSpan.textContent = countRestOfPremiumAccount(account);
+        }
+    });
 }
 
 function handleListClick(event, tab) {
@@ -83,11 +115,11 @@ function createAccountRowHTML(account, tab) {
         <tr class="accountElement ${tab}List-accountElement">
             <td class='accountPremium'>
                 <div class='accountPremium-backgroundImage'></div>
-                <span class='accountPremium-textContent'>${account.premiumAccount || '-'}</span>
+                <span class='accountPremium-textContent'>${countRestOfPremiumAccount(account)}</span>
             </td>
             <td class='accountName'>
                 <div class='accountRank-backgroundImage' style='background-image: url("${account.rankIcon}");'></div>
-                <span class='accountName-textContent'>${account.nickname}</span>
+                <span class='accountName-textContent'>${account.clan} ${account.nickname}</span>
             </td>
             <td class='accountCrystals'>
                 <div class='accountCrystals-backgroundImage'></div>
